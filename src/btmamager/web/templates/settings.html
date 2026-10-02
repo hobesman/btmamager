@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Settings · btmamager{% endblock %}
+{% block content %}
+<h3>Settings</h3>
+<p class="muted">Values set in the environment / <code>.env</code> are locked here. Everything else is saved to
+  <code>{{ s.data_dir }}/settings.json</code> and takes effect immediately.</p>
+{% if saved %}<p class="flash note">Saved.</p>{% endif %}
+{% if errors %}<p class="error">Not saved: fix the highlighted fields.</p>{% endif %}
+
+<form method="post" action="/settings" class="settings">
+  {% for row in fields %}
+  {% set f = row.f %}
+  <div class="field">
+    {% if f.kind == "checkbox" %}
+    <label>
+      <input type="checkbox" role="switch" name="{{ f.name }}" {% if row.value in (True, "on", "true", "1") %}checked{% endif %}
+             {% if row.locked %}disabled{% endif %}>
+      {{ f.label }}
+      {% if row.locked %}<span class="badge" title="Set by environment">env</span>{% endif %}
+    </label>
+    {% else %}
+    <label for="{{ f.name }}">{{ f.label }}
+      {% if row.locked %}<span class="badge" title="Set by environment">env</span>{% endif %}</label>
+    <input id="{{ f.name }}" name="{{ f.name }}"
+           type="{{ 'password' if f.kind == 'password' else ('number' if f.kind == 'number' else 'text') }}"
+           {% if f.kind == "number" %}step="any"{% endif %}
+           {% if f.kind == "password" %}value="" placeholder="{{ '••••••••' if row.value else '' }}" autocomplete="new-password"
+           {% else %}value="{{ row.value if row.value is not none else '' }}"{% endif %}
+           {% if row.locked %}disabled{% endif %}
+           {% if errors.get(f.name) %}aria-invalid="true"{% endif %}>
+    {% endif %}
+    <small class="{{ 'error' if errors.get(f.name) else 'muted' }}">{{ errors.get(f.name) or f.help }}</small>
+  </div>
+  {% endfor %}
+  <div class="actions">
+    <button type="submit">Save</button>
+    <button type="button" class="secondary" hx-post="/settings/test" hx-include="closest form"
+            hx-target="#test" hx-indicator="#test-spin">Test qBittorrent connection
+      <span id="test-spin" class="htmx-indicator" aria-busy="true"></span></button>
+  </div>
+  <div id="test"></div>
+</form>
+{% endblock %}

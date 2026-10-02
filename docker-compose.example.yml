@@ -1,0 +1,21 @@
+# Copy to docker-compose.yml and adjust. Put secrets in .env, never in this file.
+services:
+  btmamager:
+    image: ghcr.io/hobesman/btmamager:latest
+    # build: .   # or build from a clone of the repo
+    container_name: btmamager
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8091:8091"   # keep both sides equal to WEB_PORT in .env
+    volumes:
+      - ./data:/data  # settings.json saved from the web UI
+    # Join the network qBittorrent is on so QBIT_URL=http://qbittorrent:8080 resolves.
+    networks: [media]
+
+networks:
+  media:
+    external: true   # e.g. the network your qBittorrent compose project created
+
+# qBittorrent behind a VPN container (gluetun etc.)? Drop `networks:` above and reach it through
+# the VPN container instead, e.g. QBIT_URL=http://gluetun:8080 with btmamager on gluetun's network.

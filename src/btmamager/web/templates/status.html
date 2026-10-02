@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Status · btmamager{% endblock %}
+{% block content %}
+<div class="status-head">
+  <div>
+    <h3>Status
+      {% if s.dry_run %}<span class="badge st-dry" title="Nothing is paused or resumed">dry run</span>
+      {% else %}<span class="badge st-live">live</span>{% endif %}
+    </h3>
+    <p class="muted">
+      Seeding up to <strong>{{ s.target_seeding }}</strong> torrents from <code>{{ s.approved_tracker or "(not set)" }}</code>:
+      everything completed in the last <strong>{{ "%g"|format(s.max_age_hours) }} h</strong>, then the largest.
+      Runs every {{ "%g"|format(s.interval_minutes) }} min{% if mgr.next_run %}, next at <time data-ts="{{ mgr.next_run|iso }}"></time>{% endif %}.
+    </p>
+  </div>
+  <form method="post" action="/run">
+    <button type="submit" aria-busy="false" onclick="this.setAttribute('aria-busy','true')">Run now</button>
+  </form>
+</div>
+
+{% if not last %}
+<p class="muted">No run yet.</p>
+{% else %}
+<article>
+  <header>
+    Last run <time data-ts="{{ last.started|iso }}"></time> · {{ last.seconds }} s ·
+    {% if last.ok %}<span class="badge st-done">ok</span>{% else %}<span class="badge st-failed">failed</span>{% endif %}
+    {% if last.ok and last.dry_run %}<span class="badge st-dry">dry run</span>{% endif %}
+  </header>
+  {% if last.error %}<p class="error">{{ last.error }}</p>{% endif %}
+  {% for w in last.warnings %}<div class="warn-box"><p>{{ w }}</p></div>{% endfor %}
+  {% if last.ok %}
+  {% set c = last.counts %}
+  <div class="stats">
+    <div><span>{{ c.seeding_after }}</span>approved seeding{% if last.dry_run %} (after changes){% endif %}</div>
+    <div><span>{{ c.young }}</span>recent ({{ "%g"|format(s.max_age_hours) }} h)</div>
+    <div><span>{{ c.large }}</span>largest{% if c.size_cutoff %}<small>≥ {{ c.size_cutoff|size }}</small>{% endif %}</div>
+    <div><span>{{ c.approved }}</span>completed on tracker</div>
+    <div><span>{{ c.other_tracker }}</span>other trackers</div>
+    <div><span>{{ c.to_pause }}</span>{% if last.dry_run %}would pause{% else %}paused{% endif %}</div>
+    <div><span>{{ c.to_resume }}</span>{% if last.dry_run %}would resume{% else %}resumed{% endif %}</div>
+  </div>
+  {% if last.actions %}
+  <div class="overflow-auto">
+  <table class="striped actions-table">
+    <thead><tr><th>Action</th><th>Torrent</th><th>Size</th><th>Why</th></tr></thead>
+    <tbody>
+    {% for a in last.actions %}
+      <tr>
+        <td><span class="badge {{ 'st-failed' if a.action == 'pause' else 'st-done' }}">{{ ('would ' if last.dry_run else '') ~ a.action }}</span></td>
+        <td>{{ a.name }}</td>
+        <td class="num">{{ a.size|size }}</td>
+        <td class="muted">{{ a.reason }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="muted">Nothing to change.</p>
+  {% endif %}
+  {% endif %}
+</article>
+{% endif %}
+
+{% if history|length > 1 %}
+<h4>Recent runs</h4>
+<div class="overflow-auto">
+<table class="striped">
+  <thead><tr><th>When</th><th>Result</th><th>Seeding</th><th>Paused</th><th>Resumed</th></tr></thead>
+  <tbody>
+  {% for h in history %}
+    <tr>
+      <td><time data-ts="{{ h.started|iso }}"></time></td>
+      <td>{% if h.ok %}ok{% if h.dry_run %} (dry run){% endif %}{% else %}<span class="error">{{ h.error }}</span>{% endif %}</td>
+      <td>{{ h.counts.seeding_after if h.ok else "–" }}</td>
+      <td>{{ h.counts.to_pause if h.ok else "–" }}</td>
+      <td>{{ h.counts.to_resume if h.ok else "–" }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+{% endblock %}
