@@ -76,7 +76,10 @@ def test_settings_save_then_live_run(tmp_path):
         saved = json.loads((tmp_path / "settings.json").read_text())
         assert saved["approved_tracker"] == "t.myanonamouse.net" and saved["dry_run"] is False
         c.post("/run", auth=AUTH)
-        assert "MAM book" in c.get("/", auth=AUTH).text
+        assert c.get("/", auth=AUTH).status_code == 200
+        # Saving wakes the background loop, so either it or Run now applied the changes, exactly once.
+        runs = c.app.state.manager.history
+        assert sum(len(r.actions) for r in runs if not r.dry_run) == 2
     assert qb.paused == ["b"] and qb.resumed == ["a"]
 
 
