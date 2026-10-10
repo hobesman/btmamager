@@ -19,6 +19,7 @@ class Torrent:
     progress: float
     completion_on: int  # unix time; 0 or -1 when unknown
     trackers: list[str] = field(default_factory=list)  # hostnames
+    mam_id: int | None = None  # from the torrent's comment link, when known
 
     @property
     def completed(self) -> bool:
@@ -60,7 +61,9 @@ def is_approved(t: Torrent, approved: str) -> bool:
     return any(host_matches(h, approved) for h in t.trackers)
 
 
-def decide(torrents: list[Torrent], approved: str, target: int, max_age_hours: float, now: float) -> Plan:
+def decide(torrents: list[Torrent], approved: str, target: int, max_age_hours: float, now: float,
+           unsatisfied: set[str] = frozenset()) -> Plan:
+    """`unsatisfied`: hashes of torrents the tracker says still need seeding; they always seed."""
     plan = Plan()
     cutoff = now - max_age_hours * 3600
 
@@ -73,18 +76,26 @@ def decide(torrents: list[Torrent], approved: str, target: int, max_age_hours: f
         if t.active:
             plan.pause.append(Action(t.hash, t.name, t.size, "pause", "not on the approved tracker"))
 
-    # 2. Recently completed approved torrents always seed.
-    young = [t for t in ours if t.completion_on > 0 and t.completion_on >= cutoff]
-    young_ids = {t.hash for t in young}
-    if len(young) > target:
-        plan.warnings.append(f"{len(young)} torrents completed in the last {max_age_hours:g} h, "
-                             f"more than the target of {target}; seeding all of them.")
+    # 2. Unsatisfied and recently completed approved torrents always seed.
+    unsat = [t for t in ours if t.hash in unsatisfied]
+    young = [t for t in ours if t.hash not in unsatisfied and max_age_hours > 0
+             and t.completion_on > 0 and t.completion_on >= cutoff]
+    keep = unsat + young
+    keep_ids = {t.hash for t in keep}
+    if len(keep) > target:
+        why = " and ".join(w for w, n in ((f"{len(unsat)} unsatisfied", unsat),
+                                          (f"{len(young)} completed in the last {max_age_hours:g} h", young)) if n)
+        plan.warnings.append(f"{why}: {len(keep)} torrents, more than the target of {target}; "
+                             "seeding all of them.")
 
-    # 3. Fill the rest of the target with the largest of the older ones.
-    older = sorted((t for t in ours if t.hash not in young_ids), key=lambda t: (-t.size, t.hash))
-    slots = max(0, target - len(young))
+    # 3. Fill the rest of the target with the largest of the others.
+    older = sorted((t for t in ours if t.hash not in keep_ids), key=lambda t: (-t.size, t.hash))
+    slots = max(0, target - len(keep))
     large, rest = older[:slots], older[slots:]
 
+    for t in unsat:
+        if not t.active:
+            plan.resume.append(Action(t.hash, t.name, t.size, "resume", "unsatisfied on the tracker"))
     for t in young:
         if not t.active:
             plan.resume.append(Action(t.hash, t.name, t.size, "resume", f"completed within {max_age_hours:g} h"))
@@ -100,9 +111,10 @@ def decide(torrents: list[Torrent], approved: str, target: int, max_age_hours: f
         "completed": len(done),
         "other_tracker": len(others),
         "approved": len(ours),
+        "unsatisfied": len(unsat),
         "young": len(young),
         "large": len(large),
-        "seeding_after": len(young) + len(large),
+        "seeding_after": len(keep) + len(large),
         "size_cutoff": large[-1].size if large else None,
         "to_pause": len(plan.pause),
         "to_resume": len(plan.resume),

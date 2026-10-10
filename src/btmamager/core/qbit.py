@@ -8,6 +8,7 @@ from urllib.parse import urlsplit
 import qbittorrentapi
 
 from .config import Settings
+from .mam import mam_id_from_comment
 from .policy import Torrent
 
 log = logging.getLogger(__name__)
@@ -31,6 +32,8 @@ class QBit:
         # hash -> tracker hostnames. Trackers rarely change, and paused torrents report no
         # current tracker, so looking them up every cycle would cost one request per torrent.
         self._hosts: dict[str, list[str]] = {}
+        # hash -> MAM torrent id from the comment (None if it has no MAM link). Comments never change.
+        self._mam_ids: dict[str, int | None] = {}
 
     @classmethod
     def from_settings(cls, s: Settings) -> "QBit":
@@ -48,14 +51,25 @@ class QBit:
         for t in self.client.torrents_info():
             h = t["hash"]
             seen.add(h)
+            if "comment" in t:  # qBittorrent 5 lists comments; older versions need a request each
+                self._mam_ids[h] = mam_id_from_comment(t["comment"])
             out.append(Torrent(
                 hash=h, name=t.get("name", h), size=int(t.get("size") or 0), state=t.get("state", ""),
                 progress=float(t.get("progress") or 0), completion_on=int(t.get("completion_on") or 0),
-                trackers=self._trackers(h, t.get("tracker") or ""),
+                trackers=self._trackers(h, t.get("tracker") or ""), mam_id=self._mam_ids.get(h),
             ))
-        for h in set(self._hosts) - seen:
-            del self._hosts[h]
+        for cache in (self._hosts, self._mam_ids):
+            for h in set(cache) - seen:
+                del cache[h]
         return out
+
+    def fill_mam_ids(self, torrents: list[Torrent]) -> None:
+        """Set `mam_id` from each torrent's comment, fetching comments not seen before."""
+        for t in torrents:
+            if t.hash not in self._mam_ids:
+                comment = self.client.torrents_properties(torrent_hash=t.hash).get("comment") or ""
+                self._mam_ids[t.hash] = mam_id_from_comment(comment)
+            t.mam_id = self._mam_ids[t.hash]
 
     def _trackers(self, h: str, current: str) -> list[str]:
         if current:

@@ -5,7 +5,9 @@ Keeps qBittorrent seeding only MyAnonamouse (or any one tracker's) torrents, and
 Each run, for **completed** torrents:
 
 1. **Other trackers**: anything seeding from a tracker other than `APPROVED_TRACKER` is paused.
-2. **Recent**: approved-tracker torrents that completed within `MAX_AGE_HOURS` always seed.
+2. **Must seed**: approved-tracker torrents always seed if
+   - MAM lists them as **unsatisfied** or **hit & run** (only when `MAM_ID` is set; see below), or
+   - they completed within `MAX_AGE_HOURS` (set it to `0` to rely on MAM alone).
 3. **Largest**: the rest of `TARGET_SEEDING` is filled with the largest remaining approved-tracker torrents.
    Paused ones are resumed if needed; everything else from that tracker is paused.
 
@@ -13,6 +15,24 @@ Example: target 190, 72 h, `t.myanonamouse.net`. With 10 MAM torrents completed 
 seed plus the 180 largest older MAM torrents, and every non-MAM torrent is paused. Downloads, checking and
 errored torrents are never touched. A torrent counts as MAM if **any** of its trackers is that host (or a
 subdomain of it).
+
+## Unsatisfied torrents from MAM
+
+Give btmamager a MAM session and it asks MAM which of your torrents still need seed time, instead of
+(or as well as) guessing from their age:
+
+1. On MAM, open **Preferences → Security** and create a session for the IP btmamager connects from
+   (an ASN-locked session survives a changing IP). Copy its `mam_id`.
+2. Paste it into **Settings → MAM session** (or `MAM_ID` in `.env`) and press **Test MAM connection**.
+
+Each run then reads your **Seeding/Inactive, Unsatisfied** and **Hit & Run** lists from your MAM profile and
+keeps every matching torrent seeding, even past the target. MAM's list has no infohash, so torrents are
+matched by the `myanonamouse.net/t/<id>` link in the torrent's comment, or else by name. Anything MAM lists
+that can't be found in qBittorrent is shown as a warning on the Status page.
+
+If MAM can't be reached or rejects the session, that run changes nothing and shows the error, so a lapsed
+session never pauses a torrent that still owes seed time. This uses the endpoints behind MAM's own profile
+pages, which aren't a documented API and could change.
 
 ## Run it
 
@@ -45,12 +65,13 @@ editable in the UI and saved to `/data/settings.json`.
 | `QBIT_USERNAME` / `QBIT_PASSWORD` | empty | Leave empty if qBittorrent bypasses auth for the Docker subnet |
 | `APPROVED_TRACKER` | – | e.g. `t.myanonamouse.net`; a pasted announce URL is trimmed to its host |
 | `TARGET_SEEDING` | `190` | Approved-tracker torrents to seed |
-| `MAX_AGE_HOURS` | `72` | Completed within this window → always seed, even past the target |
+| `MAM_ID` | empty | MAM session cookie; when set, unsatisfied / hit & run torrents always seed |
+| `MAX_AGE_HOURS` | `72` | Completed within this window → always seed, even past the target; `0` = off |
 | `INTERVAL_MINUTES` | `15` | How often to run |
 | `DRY_RUN` | `true` | Only report what would change |
 
-A qBittorrent password entered in the UI is stored in plain text in `data/settings.json`; put it in `.env`
-if you'd rather not.
+A qBittorrent password or `mam_id` entered in the UI is stored in plain text in `data/settings.json`; put it
+in `.env` if you'd rather not.
 
 **qBittorrent queueing**: if *Options → BitTorrent → Torrent Queueing* is on with *Maximum active uploads* or
 *Maximum active torrents* below your target, some resumed torrents will sit as "queued" instead of seeding.

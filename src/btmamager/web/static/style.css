@@ -39,3 +39,4 @@ td.num { white-space: nowrap; text-align: right; }
 .warn-box p { margin: 0; }
 .htmx-indicator { display: none; }
 .htmx-request .htmx-indicator, .htmx-request.htmx-indicator { display: inline-block; }
+.settings label.clear { font-size: .85em; margin-top: .2rem; }

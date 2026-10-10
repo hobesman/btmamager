@@ -9,7 +9,10 @@
     </h3>
     <p class="muted">
       Seeding up to <strong>{{ s.target_seeding }}</strong> torrents from <code>{{ s.approved_tracker or "(not set)" }}</code>:
-      everything completed in the last <strong>{{ "%g"|format(s.max_age_hours) }} h</strong>, then the largest.
+      {%- set always = [] -%}
+      {%- if s.use_mam %}{% set _ = always.append("everything MAM lists as unsatisfied") %}{% endif -%}
+      {%- if s.max_age_hours > 0 %}{% set _ = always.append("everything completed in the last <strong>" ~ ("%g"|format(s.max_age_hours)) ~ " h</strong>") %}{% endif -%}
+      {{ always|join(" and ")|safe }}{% if always %}, then{% endif %} the largest.
       Runs every {{ "%g"|format(s.interval_minutes) }} min{% if mgr.next_run %}, next at <time data-ts="{{ mgr.next_run|iso }}"></time>{% endif %}.
     </p>
   </div>
@@ -33,7 +36,8 @@
   {% set c = last.counts %}
   <div class="stats">
     <div><span>{{ c.seeding_after }}</span>approved seeding{% if last.dry_run %} (after changes){% endif %}</div>
-    <div><span>{{ c.young }}</span>recent ({{ "%g"|format(s.max_age_hours) }} h)</div>
+    {% if s.use_mam or c.unsatisfied %}<div><span>{{ c.unsatisfied }}</span>unsatisfied on MAM</div>{% endif %}
+    {% if s.max_age_hours > 0 or c.young %}<div><span>{{ c.young }}</span>recent ({{ "%g"|format(s.max_age_hours) }} h)</div>{% endif %}
     <div><span>{{ c.large }}</span>largest{% if c.size_cutoff %}<small>≥ {{ c.size_cutoff|size }}</small>{% endif %}</div>
     <div><span>{{ c.approved }}</span>completed on tracker</div>
     <div><span>{{ c.other_tracker }}</span>other trackers</div>

@@ -123,6 +123,15 @@ def create_app(store: ConfigStore | None = None, manager: Manager | None = None)
             ok, msg = False, str(e)
         return templates.TemplateResponse(request, "_test.html", {"request": request, "ok": ok, "msg": msg})
 
+    @r.post("/settings/test-mam", response_class=HTMLResponse)
+    async def settings_test_mam(request: Request):
+        form = {k: str(v) for k, v in (await request.form()).items()}
+        try:
+            ok, msg = await mgr.test_mam(store.preview(form))
+        except ConfigError as e:
+            ok, msg = False, str(e)
+        return templates.TemplateResponse(request, "_test.html", {"request": request, "ok": ok, "msg": msg})
+
     app.include_router(r)
     return app
 

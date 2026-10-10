@@ -90,3 +90,27 @@ def test_second_pass_is_a_no_op():
     first = decide(ts, MAM, 20, 72, NOW)
     second = decide(apply(ts, first), MAM, 20, 72, NOW)
     assert second.actions == []
+
+
+def test_unsatisfied_always_seed_even_if_small_and_old():
+    ts = [t("unsat", size=1, state="stoppedUP")] + [t(f"big{i}", size=100 + i) for i in range(3)]
+    plan = decide(ts, MAM, 2, 72, NOW, unsatisfied={"unsat"})
+    assert ids(plan.resume) == {"unsat"}
+    assert [a.reason for a in plan.resume] == ["unsatisfied on the tracker"]
+    assert ids(plan.pause) == {"big0", "big1"}
+    assert plan.counts["unsatisfied"] == 1 and plan.counts["large"] == 1
+
+
+def test_zero_age_turns_recent_rule_off():
+    ts = [t("fresh", age_h=0.1, size=1), t("big", size=9)]
+    plan = decide(ts, MAM, 1, 0, NOW)
+    assert plan.counts["young"] == 0
+    assert ids(plan.pause) == {"fresh"}
+
+
+def test_unsatisfied_not_double_counted_as_recent():
+    ts = [t("both", age_h=1, state="stoppedUP"), t("young", age_h=1, state="stoppedUP")]
+    plan = decide(ts, MAM, 1, 72, NOW, unsatisfied={"both"})
+    assert plan.counts["unsatisfied"] == 1 and plan.counts["young"] == 1
+    assert plan.counts["seeding_after"] == 2
+    assert "1 unsatisfied and 1 completed" in plan.warnings[0]

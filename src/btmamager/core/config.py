@@ -29,6 +29,7 @@ class Settings(BaseSettings):
 
     # Policy
     approved_tracker: str = ""
+    mam_id: str = ""
     target_seeding: int = Field(default=190, ge=0)
     max_age_hours: float = Field(default=72.0, ge=0)
     interval_minutes: float = Field(default=15.0, ge=1)
@@ -60,6 +61,10 @@ class Settings(BaseSettings):
         return v
 
     @property
+    def use_mam(self) -> bool:
+        return bool(self.mam_id.strip())
+
+    @property
     def configured(self) -> bool:
         return bool(self.approved_tracker)
 
@@ -71,7 +76,7 @@ class Settings(BaseSettings):
         return out
 
 
-SECRETS = {"qbit_password", "web_password"}
+SECRETS = {"qbit_password", "web_password", "mam_id"}
 
 
 @dataclass(frozen=True)
@@ -89,7 +94,11 @@ EDITABLE: list[FieldInfo] = [
     FieldInfo("qbit_password", "qBittorrent password", "Leave blank to keep the saved password", "password"),
     FieldInfo("approved_tracker", "Approved tracker", "Hostname, e.g. t.myanonamouse.net (subdomains match too)", "text"),
     FieldInfo("target_seeding", "Target seeding torrents", "Approved-tracker torrents to keep seeding", "number"),
-    FieldInfo("max_age_hours", "Always seed if completed within (hours)", "These are kept even beyond the target", "number"),
+    FieldInfo("mam_id", "MAM session (mam_id)",
+              "Optional. From MAM Preferences → Security; when set, every torrent MAM lists as unsatisfied or "
+              "hit & run always seeds. Leave blank to keep the saved one", "password"),
+    FieldInfo("max_age_hours", "Always seed if completed within (hours)",
+              "These are kept even beyond the target. 0 turns this off (e.g. when relying on MAM)", "number"),
     FieldInfo("interval_minutes", "Run every (minutes)", "Minimum 1", "number"),
     FieldInfo("dry_run", "Dry run", "Only show what would change; don't pause or resume anything", "checkbox"),
 ]
@@ -176,6 +185,8 @@ class ConfigStore:
             elif f.name in form:
                 value = str(form[f.name]).strip()
                 if f.kind == "password" and not value:
+                    if str(form.get(f.name + "_clear", "")).lower() in ("1", "true", "on", "yes"):
+                        saved[f.name] = ""
                     continue  # blank = keep existing
                 saved[f.name] = value
         values = self.base.model_dump()

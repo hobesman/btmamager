@@ -28,6 +28,9 @@
            {% else %}value="{{ row.value if row.value is not none else '' }}"{% endif %}
            {% if row.locked %}disabled{% endif %}
            {% if errors.get(f.name) %}aria-invalid="true"{% endif %}>
+    {% if f.kind == "password" and row.value and not row.locked %}
+    <label class="clear"><input type="checkbox" name="{{ f.name }}_clear"> Clear saved value</label>
+    {% endif %}
     {% endif %}
     <small class="{{ 'error' if errors.get(f.name) else 'muted' }}">{{ errors.get(f.name) or f.help }}</small>
   </div>
@@ -37,6 +40,9 @@
     <button type="button" class="secondary" hx-post="/settings/test" hx-include="closest form"
             hx-target="#test" hx-indicator="#test-spin">Test qBittorrent connection
       <span id="test-spin" class="htmx-indicator" aria-busy="true"></span></button>
+    <button type="button" class="secondary" hx-post="/settings/test-mam" hx-include="closest form"
+            hx-target="#test" hx-indicator="#test-mam-spin">Test MAM connection
+      <span id="test-mam-spin" class="htmx-indicator" aria-busy="true"></span></button>
   </div>
   <div id="test"></div>
 </form>
